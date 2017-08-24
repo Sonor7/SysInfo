@@ -4,6 +4,9 @@ tempfile1=/scripts/temp1.txt
 tempfile2=/scripts/temp2.txt
 tempipfile=/scripts/tempipfile.txt
 tempdnsfile=/scripts/tempdnsfile.txt
+echo "NetworkTest starts running" >> $logfile
+date >> $logfile
+arg=$1
 function LogTest ()
 {
 if [ -e $logfile ]
@@ -16,21 +19,38 @@ fi
 }
 function IpTestPrep() 
 {
-ifconfig | grep -w "inet" | tee $tempfile1 $logfile
+ifconfig | grep -w "inet" > $tempfile1
 awk '{print $2}' $tempfile1 > $tempipfile
 }
 function DnsTestPrep() 
 {
-cat /etc/resolv.conf | grep -w "nameserver" | tee $tempfile2 $logfile
+cat /etc/resolv.conf | grep -w "nameserver" > $tempfile2 
 awk '{print $2}' $tempfile2 > $tempdnsfile
 }
 function IpTest()
 {
-while read line 
-do
+echo "Entering IpTest" >> $logfile
+echo $arg
+case $arg in
+    0 )
+    echo "Working without provided ip" >> $logfile
+    while read line 
+    do
+    ping -c 4 -D $line >> $logfile &
 echo "Pinging $line" >> $logfile
 ping -c 4 -D $line   >> $logfile &
-done < $tempipfile
+    done < $tempipfile
+;;
+    -[P] )
+    echo "Working with provided ip" >> $logfile
+    echo $IP
+    ping -c 4 -D $IP >> $logfile &
+    shift
+    ;;
+*)
+echo "Something is borked" >> $logfile
+;;
+esac
 }
 function DnsTest()
 {
@@ -47,20 +67,15 @@ rm -f $temp2
 rm -f $tempdnsfile
 rm -f $tempipfile
 }
-export $logfile
-#test if the logfile exists
+#export $logfile
 LogTest &
-#gets the information from relevant places, and uses awk to create a file that is usable for piping into the commans(ping and nslookup)
 IpTestPrep &
 DnsTestPrep &
-#Runs the ip test. Not multithreaded, because we want to wait for it to properly write to the log.
+/bin/sleep 1
 IpTest
-#waiting for it to run
 /bin/sleep 5
-#tests the dns server
 DnsTest 
-#adds date for convenience
+echo "NetworkTest stops running" >> $logfile
 date >> $logfile
-#removes the temporary files
 CleanUp
 exit
